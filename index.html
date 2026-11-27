@@ -41,7 +41,10 @@ backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);touch-action:none}
 #mode.place{background:rgba(255,180,40,.75)}
 #menuBtn{display:grid;top:max(12px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));width:52px;height:52px;bottom:auto}
 #menuBtn svg{width:26px;height:26px}
-.touch .cross{display:none}
+.touch .cross{display:none}.touch.gun .cross{display:block}
+#fire{right:max(22px,env(safe-area-inset-right));bottom:calc(max(12px,env(safe-area-inset-bottom)) + 176px);width:96px;height:96px;background:rgba(214,60,50,.8)}
+#fire svg{width:44px;height:44px}
+.ammo{position:fixed;right:max(16px,env(safe-area-inset-right));top:calc(max(12px,env(safe-area-inset-top)) + 64px);background:var(--ui);padding:6px 14px;border-radius:10px;font-weight:800;font-size:18px;display:none;pointer-events:none;font-variant-numeric:tabular-nums}
 .stick{position:fixed;width:130px;height:130px;margin:-65px;border-radius:50%;background:rgba(255,255,255,.18);border:2px solid rgba(255,255,255,.5);display:none;pointer-events:none}
 .stick i{position:absolute;left:50%;top:50%;width:56px;height:56px;margin:-28px;border-radius:50%;background:rgba(255,255,255,.75)}
 .hint{position:fixed;left:max(14px,env(safe-area-inset-left));top:max(12px,env(safe-area-inset-top));font-size:13px;background:var(--ui);padding:6px 12px;border-radius:10px;pointer-events:none;max-width:60vw}
@@ -80,6 +83,8 @@ backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);touch-action:none}
 <div class="toast" id="toast"></div>
 <div class="stick" id="stick"><i></i></div>
 <button class="tbtn" id="jump" aria-label="Прыжок"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+<button class="tbtn hide" id="fire" aria-label="Огонь"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg></button>
+<div class="ammo" id="ammo"></div>
 <button class="tbtn" id="mode" aria-label="Режим: ломать или ставить"></button>
 <button class="tbtn" id="menuBtn" aria-label="Меню"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 7h14M5 12h14M5 17h14"/></svg></button>
 
@@ -115,7 +120,9 @@ import * as THREE from './three.module.min.js';
 const SX=64,SZ=64,SY=40,SEA=7,CH=16,NT=32;
 const AIR=0,GRASS=1,DIRT=2,STONE=3,SAND=4,LOG=5,LEAVES=6,PLANKS=7,BRICK=8,GLASS=9,WATER=10,COBBLE=11,DPLANKS=12,SNOW=13,
  WWHITE=14,WRED=15,WBLUE=16,WYELLOW=17,WGREEN=18,LAMP=19,PUMPKIN=20,BOOKS=21,GOLD=22,QUARTZ=23,ROOF=24,HAY=25,FLOOR=26;
-const SWORD=200,BOW=201;
+const SWORD=200,BOW=201,PISTOL=202,AK=203;
+const GUNS={[PISTOL]:{n:'Пистолет',mag:12,rate:.25,auto:false,dmg:2,kick:.04,reload:1.1,snd:2600},
+ [AK]:{n:'Автомат',mag:30,rate:.1,auto:true,dmg:1,kick:.018,reload:1.7,snd:1500}};
 const B=[null,
  {n:'Трава',t:[0,1,2]},{n:'Земля',t:[2,2,2]},{n:'Камень',t:[3,3,3]},{n:'Песок',t:[4,4,4]},
  {n:'Бревно',t:[6,5,6]},{n:'Листва',t:[7,7,7],see:1},{n:'Доски',t:[8,8,8]},{n:'Кирпич',t:[9,9,9]},
@@ -125,8 +132,8 @@ const B=[null,
  {n:'Фонарь',t:[20,20,20],glow:1},{n:'Тыква',t:[22,21,22]},{n:'Книжная полка',t:[13,23,13]},{n:'Золото',t:[24,24,24]},
  {n:'Белый камень',t:[25,25,25]},{n:'Черепица',t:[26,26,26]},{n:'Сено',t:[28,27,28]},{n:'Плитка',t:[29,29,29]}];
 const BLOCKS=[GRASS,DIRT,STONE,COBBLE,SAND,SNOW,LOG,LEAVES,PLANKS,DPLANKS,BRICK,ROOF,GLASS,QUARTZ,FLOOR,WWHITE,WRED,WBLUE,WYELLOW,WGREEN,LAMP,PUMPKIN,BOOKS,HAY,GOLD];
-const ITEMS=[SWORD,BOW,...BLOCKS];
-const NAME=t=>t===SWORD?'Меч':t===BOW?'Лук':B[t].n;
+const ITEMS=[AK,PISTOL,SWORD,BOW,...BLOCKS];
+const NAME=t=>t===SWORD?'Меч':t===BOW?'Лук':GUNS[t]?GUNS[t].n:B[t].n;
 const isTool=t=>t>=200;
 const $=id=>document.getElementById(id);
 const isTouch=matchMedia('(pointer:coarse)').matches||navigator.maxTouchPoints>0;
@@ -185,6 +192,12 @@ function icon(t){const c=document.createElement('canvas');c.width=c.height=48;co
   g.strokeStyle='#f2efe6';g.lineWidth=1.6;g.beginPath();g.moveTo(8+1.5,10);g.lineTo(38,40-1.5);g.stroke();
   g.strokeStyle='#6d4a2a';g.lineWidth=2.4;g.beginPath();g.moveTo(14,34);g.lineTo(36,12);g.stroke();
   g.fillStyle='#c9d1d8';g.beginPath();g.moveTo(40,8);g.lineTo(33,11);g.lineTo(37,15);g.fill();return c.toDataURL()}
+ const poly=(c,...p)=>{g.fillStyle=c;g.beginPath();g.moveTo(p[0],p[1]);for(let i=2;i<p.length;i+=2)g.lineTo(p[i],p[i+1]);g.closePath();g.fill()};
+ if(t===AK){poly('#8a4b22',1,19,14,21,14,27,4,31,1,30);poly('#2a2c2f',14,19,31,19,31,26,14,26);poly('#5a3018',18,26,23,26,21,34,16,34);
+  poly('#2a2c2f',25,26,30,26,34,37,29,38);poly('#8a4b22',30,20,39,20,39,25,30,25);poly('#3a3d41',30,17.5,39,17.5,39,20,30,20);
+  poly('#1d1e20',39,21,47,21,47,23.5,39,23.5);poly('#1d1e20',44,17,45.5,17,45.5,21,44,21);return c.toDataURL()}
+ if(t===PISTOL){poly('#2b2d30',8,15,38,15,38,23,8,23);poly('#4a4e54',8,15,38,15,38,16.5,8,16.5);poly('#1f2023',11,23,33,23,33,26,11,26);
+  poly('#3b2a20',13,25,22,25,19,40,9,40);g.strokeStyle='#1f2023';g.lineWidth=2;g.beginPath();g.arc(25,26,4,0,Math.PI);g.stroke();return c.toDataURL()}
  const T=[24,2],L=[3,13],Rr=[45,13],C=[24,24],tile=i=>B[t].t[i]*16;
  g.setTransform((Rr[0]-T[0])/16,(Rr[1]-T[1])/16,(L[0]-T[0])/16,(L[1]-T[1])/16,T[0],T[1]);g.drawImage(atlas,tile(0),0,16,16,0,0,16,16);
  g.setTransform((C[0]-L[0])/16,(C[1]-L[1])/16,0,23/16,L[0],L[1]);g.drawImage(atlas,tile(1),0,16,16,0,0,16,16);g.fillStyle='rgba(0,0,0,.18)';g.globalCompositeOperation='source-atop';g.fillRect(0,0,16,16);g.globalCompositeOperation='source-over';
@@ -317,8 +330,11 @@ function physics(dt){
  P.vy-=(inW?7:25)*dt;P.vy=Math.max(P.vy,inW?-2.4:-40);
  const jump=jumpHeld||keys.Space;
  if(jump&&P.ground)P.vy=8.3;else if(jump&&inW)P.vy=3.4;
- const wall=stepEnt(P,dt);
+ const wall=stepEnt(P,dt),wet=inW||waterAt(P.x,P.y+.05,P.z);
  if(wall&&P.ground&&isTouch&&l>.3&&!solid(Math.floor(P.x),Math.floor(P.y+P.hh+.5),Math.floor(P.z)))P.vy=8.3;
+ // выбраться из воды: упёрся в берег — подкинуть наверх
+ if(wall&&wet&&l>.3)P.vy=Math.max(P.vy,7.2);
+ if(jump&&wet&&!waterAt(P.x,P.y+EYE+.2,P.z))P.vy=Math.max(P.vy,5.5);
  if(P.y<-10)spawn();
 }
 
@@ -384,7 +400,7 @@ function updAnimal(a,dt){
  if(a.kind==='chicken'&&!a.ground&&a.vy<-1.5)a.vy=-1.5;
  if(a.kind==='rabbit'&&a.ground&&a.spd>0)a.vy=4.6;
  const wall=stepEnt(a,dt);
- if(wall&&a.ground)a.vy=7.2;
+ if(wall&&(a.ground||inW))a.vy=7.2;
  if(a.y<-5){a.y=-99}
  a.phase+=dt*(a.spd?a.spd*7:0);
  const sw=a.spd?Math.sin(a.phase)*.7:0;a.legs.forEach((l,i)=>l.rotation.x=(i%2?sw:-sw)*(a.kind==='rabbit'?.3:1));
@@ -394,7 +410,7 @@ function updAnimal(a,dt){
  if(a.hurt>0){a.hurt-=dt;if(a.hurt<=0)a.mats.forEach(m=>m.emissive.setHex(0))}
 }
 const parts=[],pGeo=new THREE.BoxGeometry(.14,.14,.14);
-function poof(x,y,z,col){for(let i=0;i<16;i++){const m=new THREE.Mesh(pGeo,new THREE.MeshBasicMaterial({color:i%3?col:0xffffff,transparent:true}));
+function poof(x,y,z,col,n=16){for(let i=0;i<n;i++){const m=new THREE.Mesh(pGeo,new THREE.MeshBasicMaterial({color:i%3?col:0xffffff,transparent:true}));
  m.position.set(x+(Math.random()-.5)*.6,y+Math.random()*.6,z+(Math.random()-.5)*.6);scene.add(m);
  parts.push({m,vx:(Math.random()-.5)*3,vy:2+Math.random()*3,vz:(Math.random()-.5)*3,life:.7+Math.random()*.3})}}
 function hurt(a,dmg,fx,fz){
@@ -411,7 +427,7 @@ function ray(o,d,max=6){
  const tdx=sx?Math.abs(1/d.x):Infinity,tdy=sy?Math.abs(1/d.y):Infinity,tdz=sz?Math.abs(1/d.z):Infinity;
  let tx=sx?(sx>0?x+1-o.x:o.x-x)*tdx:Infinity,ty=sy?(sy>0?y+1-o.y:o.y-y)*tdy:Infinity,tz=sz?(sz>0?z+1-o.z:o.z-z)*tdz:Infinity;
  let n=[0,0,0];
- for(let i=0;i<64;i++){
+ for(let i=0;i<220;i++){
   const b=get(x,y,z);if(b&&b!==WATER&&inb(x,y,z))return{x,y,z,n,t};
   if(tx<ty&&tx<tz){t=tx;if(t>max)break;x+=sx;tx+=tdx;n=[-sx,0,0]}
   else if(ty<tz){t=ty;if(t>max)break;y+=sy;ty+=tdy;n=[0,-sy,0]}
@@ -454,8 +470,9 @@ function blockColor(t){if(colCache[t])return colCache[t];const d=img.data,tl=B[t
  return colCache[t]=n?(r/n<<16)|(g/n<<8)|(b/n|0):0xffffff}
 
 /* ---------- оружие ---------- */
-const held=new THREE.Group();camera.add(held);
-const hb=(g,w,h,d,x,y,z,c)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshBasicMaterial({color:c,depthTest:false,fog:false}));m.position.set(x,y,z);m.renderOrder=20;g.add(m);return m};
+const held=new THREE.Group(),heldScene=new THREE.Scene(),heldCam=new THREE.PerspectiveCamera(60,1,.01,10);heldScene.add(held);
+heldScene.add(new THREE.AmbientLight(0xffffff,1));
+const hb=(g,w,h,d,x,y,z,c)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshBasicMaterial({color:c}));m.position.set(x,y,z);g.add(m);return m};
 const swordM=new THREE.Group();
 hb(swordM,.06,.56,.025,0,.34,0,0xe3e9ef);hb(swordM,.025,.56,.03,.02,.34,0,0xb8c3cc);hb(swordM,.04,.06,.025,0,.64,0,0xe3e9ef);
 hb(swordM,.24,.05,.07,0,.05,0,0xd4a838);hb(swordM,.05,.18,.05,0,-.07,0,0x7a4f2c);hb(swordM,.07,.06,.07,0,-.17,0,0xd4a838);
@@ -465,9 +482,45 @@ for(let i=0;i<7;i++){const a=-1.1+i*(2.2/6);hb(bowM,.045,.13,.045,Math.cos(a)*.3
 hb(bowM,.008,.62,.008,-.1,0,0,0xf2efe6);
 const arrowM=new THREE.Group();hb(arrowM,.02,.02,.5,0,0,0,0x6d4a2a);hb(arrowM,.05,.05,.07,0,0,-.27,0xc9d1d8);arrowM.position.set(-.1,0,0);bowM.add(arrowM);
 bowM.position.set(.34,-.28,-.6);bowM.rotation.set(.1,-.35,.15);
-held.add(swordM,bowM);
-let swing=0,cool=0;
-function showHeld(){const t=hotbar[slot];swordM.visible=t===SWORD;bowM.visible=t===BOW;$('mode').classList.toggle('hide',isTool(t))}
+const DK=0x2a2c2f,WD=0x8a4b22;
+const akM=new THREE.Group();
+hb(akM,.07,.09,.42,0,0,0,DK);hb(akM,.06,.03,.36,0,.055,.02,0x3a3d41);hb(akM,.075,.075,.2,0,-.005,-.31,WD);
+hb(akM,.04,.035,.2,0,.06,-.31,WD);hb(akM,.025,.025,.3,0,0,-.52,0x1d1e20);hb(akM,.02,.06,.02,0,.045,-.62,0x1d1e20);
+hb(akM,.035,.035,.06,0,0,-.69,0x1d1e20);hb(akM,.06,.08,.32,0,-.035,.36,WD).rotation.x=.12;hb(akM,.065,.15,.04,0,-.07,.52,0x6e3a1a);
+hb(akM,.05,.13,.05,0,-.1,.13,0x5a3018).rotation.x=.35;hb(akM,.012,.03,.07,0,-.065,.05,0x1d1e20);
+hb(akM,.05,.09,.07,0,-.09,-.07,DK);hb(akM,.05,.09,.07,0,-.165,-.1,DK).rotation.x=-.3;hb(akM,.05,.09,.07,0,-.235,-.15,DK).rotation.x=-.55;
+const akFlash=hb(akM,.09,.09,.09,0,0,-.75,0xffd76a);akFlash.visible=false;
+akM.position.set(.36,-.36,-1.0);akM.rotation.y=.06;akM.scale.setScalar(.85);
+const pM=new THREE.Group();
+hb(pM,.05,.06,.24,0,0,-.05,0x2b2d30);hb(pM,.045,.03,.2,0,-.045,-.06,0x1f2023);hb(pM,.052,.14,.07,0,-.12,.05,0x3b2a20).rotation.x=.25;
+hb(pM,.012,.04,.06,0,-.075,-.03,0x1f2023);hb(pM,.015,.02,.02,0,.04,-.16,0x1f2023);hb(pM,.015,.02,.02,0,.04,.05,0x1f2023);
+const pFlash=hb(pM,.07,.07,.07,0,0,-.21,0xffd76a);pFlash.visible=false;
+pM.position.set(.26,-.24,-.62);pM.rotation.y=.04;
+held.add(swordM,bowM,akM,pM);
+let swing=0,cool=0,recoil=0,flashT=0,firing=false,reloadT=0;
+const ammo={[PISTOL]:12,[AK]:30};
+function showHeld(){const t=hotbar[slot];swordM.visible=t===SWORD;bowM.visible=t===BOW;akM.visible=t===AK;pM.visible=t===PISTOL;
+ $('mode').classList.toggle('hide',isTool(t));$('fire').classList.toggle('hide',!GUNS[t]);document.body.classList.toggle('gun',!!GUNS[t]);firing=false;reloadT=0;showAmmo()}
+function showAmmo(){const t=hotbar[slot],a=$('ammo');if(!GUNS[t]){a.style.display='none';return}
+ a.style.display='block';a.textContent=reloadT>0?'Перезарядка…':ammo[t]+' / '+GUNS[t].mag}
+let AC=null,noise=null;
+function audio(){try{if(!AC){AC=new(window.AudioContext||window.webkitAudioContext)();const n=AC.sampleRate*.22;noise=AC.createBuffer(1,n,AC.sampleRate);
+ const d=noise.getChannelData(0);for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/n,4)}if(AC.state==='suspended')AC.resume()}catch(e){}}
+function bang(freq){if(!AC||!noise)return;try{const s=AC.createBufferSource();s.buffer=noise;const f=AC.createBiquadFilter();f.type='lowpass';f.frequency.value=freq;
+ const g=AC.createGain();g.gain.value=.32;s.connect(f);f.connect(g);g.connect(AC.destination);s.start()}catch(e){}}
+function startReload(){const t=hotbar[slot];if(!GUNS[t]||reloadT>0||ammo[t]===GUNS[t].mag)return;reloadT=GUNS[t].reload;showAmmo()}
+function shoot(px,py){
+ const t=hotbar[slot],G=GUNS[t];if(!G||reloadT>0||cool>0)return;
+ if(ammo[t]<=0){startReload();return}
+ ammo[t]--;cool=G.rate;recoil=1;flashT=.05;bang(G.snd);
+ const o=eye(),d=dirAt(px,py);
+ if(G.auto){d.x+=(Math.random()-.5)*.02;d.y+=(Math.random()-.5)*.02;d.z+=(Math.random()-.5)*.02;d.normalize()}
+ const h=ray(o,d,60),an=rayAnimal(o,d,h?h.t:60);
+ if(an)hurt(an,G.dmg,P.x,P.z);
+ else if(h){const b=get(h.x,h.y,h.z),p=o.clone().addScaledVector(d,h.t);poof(p.x,p.y,p.z,blockColor(b),5);
+  if(b===GLASS){poof(h.x+.5,h.y+.5,h.z+.5,0xdff3ff,12);setBlock(h.x,h.y,h.z,AIR)}}
+ P.pitch=Math.min(1.55,P.pitch+G.kick);
+ if(ammo[t]===0)startReload();showAmmo()}
 const arrows=[],arrowGeo=new THREE.BoxGeometry(.04,.04,.6),arrowMat=new THREE.MeshLambertMaterial({color:0x7a5230});
 function weaponAct(px,py){
  if(cool>0)return;const o=eye(),d=dirAt(px,py),t=hotbar[slot];
@@ -485,17 +538,17 @@ function updArrows(dt){
    if(!a.stuck)a.m.lookAt(a.m.position.clone().add(a.v))}
   if(a.life<=0||a.m.position.y<-5||Math.abs(a.m.position.x-SX/2)>120){scene.remove(a.m);arrows.splice(i,1)}}}
 
-function act(place,px,py){if(isTool(hotbar[slot]))weaponAct(px,py);else blockAct(place,px,py)}
+function act(place,px,py){const t=hotbar[slot];if(GUNS[t])shoot(px,py);else if(isTool(t))weaponAct(px,py);else blockAct(place,px,py)}
 
 /* ---------- сохранение ---------- */
 const KEY='kubiki-v1';let saveT=0;
-const DEFAULT_HB=[GRASS,PLANKS,STONE,BRICK,GLASS,WRED,LAMP,SWORD,BOW];
+const DEFAULT_HB=[GRASS,PLANKS,STONE,BRICK,GLASS,LAMP,SWORD,PISTOL,AK];
 let hotbar=DEFAULT_HB.slice(),slot=0;
-function save(){try{localStorage.setItem(KEY,JSON.stringify({seed,e:[...edits].flat(),p:[P.x,P.y,P.z,P.yaw,P.pitch],slot,hb:hotbar}))}catch(e){}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify({v:3,seed,e:[...edits].flat(),p:[P.x,P.y,P.z,P.yaw,P.pitch],slot,hb:hotbar}))}catch(e){}}
 function saveSoon(){clearTimeout(saveT);saveT=setTimeout(save,700)}
 let loaded=null;try{loaded=JSON.parse(localStorage.getItem(KEY))}catch(e){}
 if(loaded&&loaded.seed){seed=loaded.seed;const e=loaded.e||[];for(let i=0;i+1<e.length;i+=2)edits.set(e[i],e[i+1]);
- if(Array.isArray(loaded.hb)&&loaded.hb.length===9&&loaded.hb.every(t=>ITEMS.includes(t)))hotbar=loaded.hb;slot=loaded.slot|0}
+ if(loaded.v>=3&&Array.isArray(loaded.hb)&&loaded.hb.length===9&&loaded.hb.every(t=>ITEMS.includes(t)))hotbar=loaded.hb;slot=loaded.slot|0}
 else seed=1+(Math.random()*1e6|0);
 
 /* ---------- интерфейс ---------- */
@@ -523,14 +576,16 @@ const ICON_PLACE='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
 function setMode(p,quiet){placeMode=p;const m=$('mode');m.innerHTML=p?ICON_PLACE:ICON_BREAK;m.classList.toggle('place',p);if(!quiet)toast(p?'Ставить: '+NAME(hotbar[slot]):'Ломать')}
 $('mode').addEventListener('pointerdown',e=>{e.stopPropagation();setMode(!placeMode)});
 $('jump').addEventListener('pointerdown',e=>{e.stopPropagation();jumpHeld=true});
+$('fire').addEventListener('pointerdown',e=>{e.stopPropagation();audio();firing=true;shoot()});
+for(const ev of['pointerup','pointercancel','pointerleave'])$('fire').addEventListener(ev,()=>firing=false);
 for(const ev of['pointerup','pointercancel','pointerleave'])$('jump').addEventListener(ev,()=>jumpHeld=false);
-$('keys').innerHTML=(isTouch?[['Ходить','джойстик слева'],['Смотреть','веди пальцем справа'],['Ломать или ставить','коснись блока'],['Сменить режим','кнопка с киркой'],['Меч и лук','выбери внизу и коснись цели'],['Все блоки','кнопка с квадратиками'],['Прыжок','кнопка со стрелкой']]
- :[['Ходить','W A S D'],['Бежать','Shift'],['Прыжок, плыть вверх','Пробел'],['Ломать или ударить','левая кнопка мыши'],['Ставить','правая кнопка мыши'],['Выбрать предмет','1–9 или колесо'],['Все блоки','E'],['Пауза','Esc']])
+$('keys').innerHTML=(isTouch?[['Ходить','джойстик слева'],['Смотреть','веди пальцем справа'],['Ломать или ставить','коснись блока'],['Сменить режим','кнопка с киркой'],['Автомат и пистолет','красная кнопка — огонь'],['Меч и лук','выбери внизу и коснись цели'],['Все блоки','кнопка с квадратиками'],['Прыжок','кнопка со стрелкой']]
+ :[['Ходить','W A S D'],['Бежать','Shift'],['Прыжок, плыть вверх','Пробел'],['Ломать, бить, стрелять','левая кнопка мыши'],['Перезарядка','R'],['Ставить','правая кнопка мыши'],['Выбрать предмет','1–9 или колесо'],['Все блоки','E'],['Пауза','Esc']])
  .map(([a,b])=>`<div><span>${a}</span><b>${b}</b></div>`).join('');
 $('hint').textContent=isTouch?'Коснись блока, чтобы ломать или ставить':'Левая кнопка — ломать, правая — ставить, E — все блоки';
 
 let started=false,paused=true,locked=false,dragLook=isTouch;
-function resume(){$('start').hidden=true;$('menu').hidden=true;started=true;paused=false;
+function resume(){audio();$('start').hidden=true;$('menu').hidden=true;started=true;paused=false;
  if(!isTouch&&!dragLook){try{const r=canvas.requestPointerLock();if(r&&r.catch)r.catch(()=>{dragLook=true})}catch(e){dragLook=true}}}
 $('play').onclick=()=>{resume();setTimeout(()=>$('hint').style.display='none',7000)};$('resume').onclick=resume;
 $('menuBtn').addEventListener('pointerdown',e=>e.stopPropagation());
@@ -546,10 +601,12 @@ document.addEventListener('pointerlockerror',()=>{dragLook=true});
 
 addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='Space')e.preventDefault();
  if(/^Digit[1-9]$/.test(e.code))pick(+e.code[5]-1);
+ if(e.code==='KeyR')startReload();
  if(e.code==='KeyE'&&started){if(invOpen)closeInv();else if(!paused)openInv()}
  if(e.code==='Escape'&&invOpen)closeInv();else if(e.code==='Escape'&&started&&!paused&&dragLook)pause()});
 addEventListener('keyup',e=>keys[e.code]=false);
-addEventListener('blur',()=>{for(const k in keys)keys[k]=false;jumpHeld=false});
+addEventListener('mouseup',()=>{if(locked)firing=false});
+addEventListener('blur',()=>{for(const k in keys)keys[k]=false;jumpHeld=false;firing=false});
 addEventListener('wheel',e=>{if(started&&!paused)pick(slot+(e.deltaY>0?1:-1))},{passive:true});
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 document.addEventListener('gesturestart',e=>e.preventDefault());
@@ -559,7 +616,8 @@ const ptr=new Map();let stickId=null,stickO=null;
 const stick=$('stick'),knob=stick.firstElementChild;
 canvas.addEventListener('pointerdown',e=>{
  if(!started||paused)return;
- if(locked){act(e.button===2);return}
+ audio();
+ if(locked){if(GUNS[hotbar[slot]]&&e.button===0){firing=true;shoot();return}act(e.button===2);return}
  canvas.setPointerCapture?.(e.pointerId);
  if(e.pointerType!=='mouse'&&stickId===null&&e.clientX<innerWidth*.42&&e.clientY>innerHeight*.3){
   stickId=e.pointerId;stickO=[e.clientX,e.clientY];stick.style.display='block';stick.style.left=e.clientX+'px';stick.style.top=e.clientY+'px';knob.style.transform='';return}
@@ -581,7 +639,7 @@ generate();buildAll();
 if(loaded?.p){[P.x,P.y,P.z,P.yaw,P.pitch]=loaded.p;if(overlaps(P).length||!(P.y>-5))spawn()}else spawn();
 populate(false);
 drawBar();pick(slot,true);setMode(false,true);
-function resize(){renderer.setSize(innerWidth,innerHeight,false);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix()}
+function resize(){renderer.setSize(innerWidth,innerHeight,false);camera.aspect=heldCam.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();heldCam.updateProjectionMatrix()}
 addEventListener('resize',resize);resize();
 let last=performance.now(),saveClock=0;
 function frame(now){
@@ -591,6 +649,10 @@ function frame(now){
   updArrows(dt);cool-=dt;saveClock+=dt;if(saveClock>5){saveClock=0;save()}}
  for(let i=parts.length-1;i>=0;i--){const p=parts[i];p.life-=dt;p.vy-=12*dt;p.m.position.x+=p.vx*dt;p.m.position.y+=p.vy*dt;p.m.position.z+=p.vz*dt;
   p.m.material.opacity=Math.max(0,p.life*1.4);if(p.life<=0){scene.remove(p.m);p.m.material.dispose();parts.splice(i,1)}}
+ if(started&&!paused){const G=GUNS[hotbar[slot]];if(firing&&G&&G.auto)shoot();
+  if(reloadT>0){reloadT-=dt;if(reloadT<=0){reloadT=0;const t=hotbar[slot];if(GUNS[t])ammo[t]=GUNS[t].mag}showAmmo()}}
+ recoil=Math.max(0,recoil-dt*9);flashT-=dt;akFlash.visible=akM.visible&&flashT>0;pFlash.visible=pM.visible&&flashT>0;
+ akM.position.z=-1.0+recoil*.06;akM.position.y=-.36;akM.rotation.x=recoil*.06+(reloadT>0?-.5:0);pM.position.z=-.62+recoil*.06;pM.rotation.x=recoil*.25+(reloadT>0?-.6:0);
  swing=Math.max(0,swing-dt*4);swordM.rotation.x=-.35-Math.sin(swing*Math.PI)*1.3;
  const bob=Math.hypot(P.vx,P.vz)>.5&&P.ground?Math.sin(now/110)*.012:0;held.position.y=bob;
  camera.position.set(P.x,P.y+EYE,P.z);camera.rotation.set(P.pitch,P.yaw,0);
@@ -598,11 +660,11 @@ function frame(now){
  const h=!isTouch&&!isTool(hotbar[slot])?ray(camera.position,dirAt()):null;
  sel.visible=!!h;if(h)sel.position.set(h.x+.5,h.y+.5,h.z+.5);
  $('uw').style.display=waterAt(P.x,P.y+EYE,P.z)?'block':'none';
- renderer.render(scene,camera);requestAnimationFrame(frame)}
+ renderer.autoClear=true;renderer.render(scene,camera);renderer.autoClear=false;renderer.clearDepth();renderer.render(heldScene,heldCam);requestAnimationFrame(frame)}
 requestAnimationFrame(frame);
 addEventListener('pagehide',save);
 document.addEventListener('visibilitychange',()=>{if(document.hidden)save()});
-window.__kub={act,P,get,setBlock,animals,hurt,get hotbar(){return hotbar},pick,openInv};
+window.__kub={act,shoot,ammo,P,get,setBlock,animals,hurt,get hotbar(){return hotbar},pick,openInv};
 }
 </script>
 </body>
